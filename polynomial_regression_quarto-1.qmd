@@ -1,0 +1,534 @@
+---
+title: "Polynomial Regression: Non-Linear Relationships"
+author: "Osman Omer Mustafa"
+date: "today"
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: cosmo
+    toc-location: left
+execute:
+  warning: false
+  message: false
+---
+
+## Introduction
+
+Linear regression assumes a straight-line relationship between predictor and outcome. 
+However, many real-world relationships are curved rather than linear. 
+**Polynomial regression** extends linear regression by adding polynomial terms (e.g., x², x³) 
+to capture non-linear patterns.
+
+**Key Question:** Does the relationship between age/BMI and insurance charges follow a straight line, 
+or does it curve in ways that require polynomial terms?
+
+## Load required libraries
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(broom)
+library(ggfortify)
+```
+
+## Read data
+```{r message=FALSE}
+data <- read_csv("insurance.csv")
+```
+
+## Basic checks
+```{r}
+glimpse(data)
+summary(data)
+sum(is.na(data))
+```
+
+## Ensure categorical variables are factors
+```{r}
+data <- data %>% 
+  mutate(
+    sex = as.factor(sex),
+    smoker = as.factor(smoker),
+    region = as.factor(region)
+  )
+
+glimpse(data)
+```
+
+## Exploratory Data Analysis
+
+### Why polynomial regression?
+
+Before fitting polynomial models, we examine scatter plots to see if relationships appear linear or curved.
+
+### Age vs Charges
+```{r message=FALSE}
+ggplot(data, aes(x = age, y = charges)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", color = "red", se = FALSE) +
+  geom_smooth(method = "lm", color = "blue", se = FALSE) +
+  labs(
+    x = "Age (Years)",
+    y = "Insurance Charges (USD)",
+    title = "Age vs Charges: Linear (Blue) vs Smoothed (Red)"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+**Interpretation:** The blue line shows a linear fit, while the red loess curve shows the actual data pattern. 
+If the red curve deviates substantially from the blue line, this suggests a non-linear relationship 
+that polynomial terms might capture better.
+
+### BMI vs Charges
+```{r message=FALSE}
+ggplot(data, aes(x = bmi, y = charges)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", color = "red", se = FALSE) +
+  geom_smooth(method = "lm", color = "blue", se = FALSE) +
+  labs(
+    x = "Body Mass Index (BMI)",
+    y = "Insurance Charges (USD)",
+    title = "BMI vs Charges: Linear (Blue) vs Smoothed (Red)"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+**Interpretation:** Again, compare the linear (blue) and smoothed (red) curves. 
+Visible curvature in the red line indicates potential benefit from polynomial terms.
+
+## Understanding Polynomial Models
+
+### Mathematical Framework
+
+**Linear Model:**
+
+```
+charges = β₀ + β₁ × age
+```
+
+This produces a straight line with constant slope β₁.
+
+**Quadratic Model:**
+
+```
+charges = β₀ + β₁ × age + β₂ × age²
+```
+
+This produces a parabola (U-shaped or inverted U-shaped curve). The age² term allows the slope to change.
+
+**Cubic Model:**
+
+```
+charges = β₀ + β₁ × age + β₂ × age² + β₃ × age³
+```
+
+This produces an S-shaped curve, allowing two direction changes.
+
+**Why I(age²) in R:** The `I()` function tells R to treat age² as a mathematical operation, 
+not a special formula operator.
+
+## Polynomial Models: Age
+
+### Linear model (baseline)
+```{r}
+model_age_linear <- lm(charges ~ age, data = data)
+tidy_age_linear <- tidy(model_age_linear, conf.int = TRUE)
+tidy_age_linear %>% knitr::kable(caption = "Linear Model: Age", digits = 2)
+```
+
+**Equation:** charges = `r round(coef(model_age_linear)[1], 2)` + `r round(coef(model_age_linear)[2], 2)` × age
+
+**Interpretation:** Each additional year increases charges by $`r round(coef(model_age_linear)[2], 2)` 
+(constant rate).
+
+### Quadratic model
+```{r}
+model_age_quad <- lm(charges ~ age + I(age^2), data = data)
+tidy_age_quad <- tidy(model_age_quad, conf.int = TRUE)
+tidy_age_quad %>% knitr::kable(caption = "Quadratic Model: Age", digits = 2)
+```
+
+```{r echo=FALSE}
+coef_quad <- coef(model_age_quad)
+age2_pval <- tidy_age_quad$p.value[tidy_age_quad$term == "I(age^2)"]
+age2_sig <- age2_pval < 0.05
+```
+
+**Equation:** charges = `r round(coef_quad[1], 2)` + `r round(coef_quad[2], 2)` × age + `r round(coef_quad[3], 4)` × age²
+
+Or in simpler format:
+
+```
+charges = intercept + (linear_age × age) + (quadratic_age × age²)
+```
+
+**Interpretation:** The age² coefficient is `r round(coef_quad[3], 4)` with p = `r format.pval(age2_pval, eps = 0.001)`. 
+`r if(age2_sig) {"This is statistically significant, indicating the relationship between age and charges is non-linear. The positive age² coefficient suggests charges increase at an accelerating rate with age."} else {"This is not statistically significant, suggesting the quadratic term does not substantially improve the linear model."}`
+
+**What does this mean?** `r if(age2_sig) {"Unlike the linear model where each year adds the same amount, here the effect of age compounds. For example, going from age 30 to 31 adds less than going from age 60 to 61."} else {"The relationship appears adequately described by a straight line."}`
+
+### Cubic model
+```{r}
+model_age_cubic <- lm(charges ~ age + I(age^2) + I(age^3), data = data)
+tidy_age_cubic <- tidy(model_age_cubic, conf.int = TRUE)
+tidy_age_cubic %>% knitr::kable(caption = "Cubic Model: Age", digits = 4)
+```
+
+```{r echo=FALSE}
+age3_pval <- tidy_age_cubic$p.value[tidy_age_cubic$term == "I(age^3)"]
+age3_sig <- age3_pval < 0.05
+```
+
+The age³ coefficient has p = `r format.pval(age3_pval, eps = 0.001)`. 
+`r if(age3_sig) {"This suggests even more complex curvature is present."} else {"This is not significant, indicating the cubic term is unnecessary. The relationship is adequately captured by lower-degree polynomials."}`
+
+### Model performance comparison: Age
+```{r}
+glance_age_linear <- glance(model_age_linear)
+glance_age_quad <- glance(model_age_quad)
+glance_age_cubic <- glance(model_age_cubic)
+
+age_performance <- bind_rows(
+  glance_age_linear %>% mutate(model = "Linear"),
+  glance_age_quad %>% mutate(model = "Quadratic"),
+  glance_age_cubic %>% mutate(model = "Cubic")
+) %>%
+  select(model, r.squared, adj.r.squared, AIC, BIC)
+
+age_performance %>% knitr::kable(caption = "Age Models Performance Comparison", digits = 4)
+```
+
+**R² Comparison:**
+
+- Linear: R² = `r round(glance_age_linear$r.squared, 4)`
+- Quadratic: R² = `r round(glance_age_quad$r.squared, 4)` 
+  (improvement: `r round((glance_age_quad$r.squared - glance_age_linear$r.squared)*100, 2)`%)
+- Cubic: R² = `r round(glance_age_cubic$r.squared, 4)` 
+  (improvement over quadratic: `r round((glance_age_cubic$r.squared - glance_age_quad$r.squared)*100, 2)`%)
+
+**AIC/BIC:** Lower values indicate better models. 
+`r if(glance_age_quad$AIC < glance_age_linear$AIC) {"The quadratic model has lower AIC than linear."} else {"The linear model has lower AIC."}`
+`r if(glance_age_quad$BIC < glance_age_linear$BIC) {"The quadratic model has lower BIC than linear."} else {"The linear model has lower BIC."}`
+
+**Adjusted R²** accounts for the number of predictors. 
+`r if(glance_age_quad$adj.r.squared > glance_age_linear$adj.r.squared) {"The quadratic model improves adjusted R², suggesting the added complexity is justified."} else {"The linear model has better adjusted R², suggesting the polynomial term adds complexity without sufficient benefit."}`
+
+### ANOVA comparison: Age models
+```{r}
+anova_age <- anova(model_age_linear, model_age_quad, model_age_cubic)
+anova_age %>% knitr::kable(caption = "ANOVA: Age Models", digits = 4)
+```
+
+```{r echo=FALSE}
+anova_age_pval_quad <- anova_age$`Pr(>F)`[2]
+anova_age_pval_cubic <- anova_age$`Pr(>F)`[3]
+```
+
+ANOVA tests whether adding polynomial terms significantly improves fit:
+
+- Quadratic vs Linear: p = `r format.pval(anova_age_pval_quad, eps = 0.001)` 
+  `r if(!is.na(anova_age_pval_quad) && anova_age_pval_quad < 0.05) {"(significant improvement)"} else {"(no significant improvement)"}`
+- Cubic vs Quadratic: p = `r format.pval(anova_age_pval_cubic, eps = 0.001)` 
+  `r if(!is.na(anova_age_pval_cubic) && anova_age_pval_cubic < 0.05) {"(significant improvement)"} else {"(no significant improvement)"}`
+
+## Polynomial Models: BMI
+
+### Linear model (baseline)
+```{r}
+model_bmi_linear <- lm(charges ~ bmi, data = data)
+tidy_bmi_linear <- tidy(model_bmi_linear, conf.int = TRUE)
+tidy_bmi_linear %>% knitr::kable(caption = "Linear Model: BMI", digits = 2)
+```
+
+**Equation:** charges = `r round(coef(model_bmi_linear)[1], 2)` + `r round(coef(model_bmi_linear)[2], 2)` × BMI
+
+### Quadratic model
+```{r}
+model_bmi_quad <- lm(charges ~ bmi + I(bmi^2), data = data)
+tidy_bmi_quad <- tidy(model_bmi_quad, conf.int = TRUE)
+tidy_bmi_quad %>% knitr::kable(caption = "Quadratic Model: BMI", digits = 2)
+```
+
+```{r echo=FALSE}
+bmi2_pval <- tidy_bmi_quad$p.value[tidy_bmi_quad$term == "I(bmi^2)"]
+bmi2_sig <- bmi2_pval < 0.05
+```
+
+The BMI² coefficient has p = `r format.pval(bmi2_pval, eps = 0.001)`. 
+`r if(bmi2_sig) {"This is significant, indicating non-linearity in the BMI-charges relationship."} else {"This is not significant, suggesting a linear relationship is adequate."}`
+
+### Cubic model
+```{r}
+model_bmi_cubic <- lm(charges ~ bmi + I(bmi^2) + I(bmi^3), data = data)
+tidy_bmi_cubic <- tidy(model_bmi_cubic, conf.int = TRUE)
+tidy_bmi_cubic %>% knitr::kable(caption = "Cubic Model: BMI", digits = 4)
+```
+
+### Model performance comparison: BMI
+```{r}
+glance_bmi_linear <- glance(model_bmi_linear)
+glance_bmi_quad <- glance(model_bmi_quad)
+glance_bmi_cubic <- glance(model_bmi_cubic)
+
+bmi_performance <- bind_rows(
+  glance_bmi_linear %>% mutate(model = "Linear"),
+  glance_bmi_quad %>% mutate(model = "Quadratic"),
+  glance_bmi_cubic %>% mutate(model = "Cubic")
+) %>%
+  select(model, r.squared, adj.r.squared, AIC, BIC)
+
+bmi_performance %>% knitr::kable(caption = "BMI Models Performance Comparison", digits = 4)
+```
+
+**R² Comparison:**
+
+- Linear: R² = `r round(glance_bmi_linear$r.squared, 4)`
+- Quadratic: R² = `r round(glance_bmi_quad$r.squared, 4)` 
+  (improvement: `r round((glance_bmi_quad$r.squared - glance_bmi_linear$r.squared)*100, 2)`%)
+- Cubic: R² = `r round(glance_bmi_cubic$r.squared, 4)` 
+  (improvement over quadratic: `r round((glance_bmi_cubic$r.squared - glance_bmi_quad$r.squared)*100, 2)`%)
+
+**AIC/BIC Interpretation:**
+
+`r if(glance_bmi_quad$AIC < glance_bmi_linear$AIC) {"The quadratic model has lower AIC than linear, suggesting improved fit."} else {"The linear model has lower AIC, favoring the simpler model."}`
+
+`r if(glance_bmi_quad$BIC < glance_bmi_linear$BIC) {"The quadratic model has lower BIC than linear."} else {"The linear model has lower BIC. BIC penalizes complexity more strongly than AIC, suggesting the quadratic term may not justify the added parameter."}`
+
+`r if(glance_bmi_cubic$AIC < glance_bmi_quad$AIC) {"The cubic model has lower AIC than quadratic."} else {"The quadratic model has lower AIC than cubic, suggesting the cubic term is unnecessary."}`
+
+### ANOVA comparison: BMI models
+```{r}
+anova_bmi <- anova(model_bmi_linear, model_bmi_quad, model_bmi_cubic)
+anova_bmi %>% knitr::kable(caption = "ANOVA: BMI Models", digits = 4)
+```
+
+## Visualization: Polynomial Curves
+
+### Age polynomial curves
+```{r}
+age_range <- seq(min(data$age), max(data$age), length.out = 100)
+
+predictions_age <- data.frame(age = age_range) %>%
+  mutate(
+    linear = predict(model_age_linear, newdata = .),
+    quadratic = predict(model_age_quad, newdata = .),
+    cubic = predict(model_age_cubic, newdata = .)
+  ) %>%
+  pivot_longer(cols = c(linear, quadratic, cubic), 
+               names_to = "model", 
+               values_to = "predicted")
+
+ggplot() +
+  geom_point(data = data, aes(x = age, y = charges), alpha = 0.3) +
+  geom_line(data = predictions_age, 
+            aes(x = age, y = predicted, color = model), 
+            linewidth = 1.2) +
+  labs(
+    x = "Age (Years)",
+    y = "Insurance Charges (USD)",
+    title = "Age vs Charges: Polynomial Model Comparison",
+    color = "Model"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+**Visual interpretation:** Observe how the curves differ. The linear model (straight line) 
+may miss systematic patterns captured by curved models. However, excessively complex curves 
+(e.g., cubic) that wiggle through noise represent overfitting.
+
+### BMI polynomial curves
+```{r}
+bmi_range <- seq(min(data$bmi), max(data$bmi), length.out = 100)
+
+predictions_bmi <- data.frame(bmi = bmi_range) %>%
+  mutate(
+    linear = predict(model_bmi_linear, newdata = .),
+    quadratic = predict(model_bmi_quad, newdata = .),
+    cubic = predict(model_bmi_cubic, newdata = .)
+  ) %>%
+  pivot_longer(cols = c(linear, quadratic, cubic), 
+               names_to = "model", 
+               values_to = "predicted")
+
+ggplot() +
+  geom_point(data = data, aes(x = bmi, y = charges), alpha = 0.3) +
+  geom_line(data = predictions_bmi, 
+            aes(x = bmi, y = predicted, color = model), 
+            linewidth = 1.2) +
+  labs(
+    x = "Body Mass Index (BMI)",
+    y = "Insurance Charges (USD)",
+    title = "BMI vs Charges: Polynomial Model Comparison",
+    color = "Model"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+## Combined Polynomial Model
+
+So far we examined age and BMI separately. Now we combine both with polynomial terms.
+
+### Linear baseline (from Project 2)
+```{r}
+model_simple_multiple <- lm(charges ~ age + bmi, data = data)
+glance_simple <- glance(model_simple_multiple)
+```
+
+### Polynomial combination
+```{r}
+model_combined <- lm(charges ~ age + I(age^2) + bmi + I(bmi^2), data = data)
+tidy_combined <- tidy(model_combined, conf.int = TRUE)
+tidy_combined %>% knitr::kable(caption = "Combined Polynomial Model", digits = 4)
+```
+
+```{r echo=FALSE}
+coef_comb <- coef(model_combined)
+age_coef <- coef_comb[2]
+age2_coef <- coef_comb[3]
+bmi_coef <- coef_comb[4]
+bmi2_coef <- coef_comb[5]
+```
+
+**Model Equation:**
+
+```
+charges = β₀ + β₁×age + β₂×age² + β₃×bmi + β₄×bmi²
+```
+
+**Interpretation of Coefficients:**
+
+- **Intercept (β₀):** `r format(round(coef_comb[1], 2), big.mark = ",")` - baseline charges (theoretical, at age=0, bmi=0)
+- **age (β₁):** `r round(age_coef, 2)` - linear age effect
+- **age² (β₂):** `r round(age2_coef, 4)` - captures curvature in age relationship
+- **bmi (β₃):** `r round(bmi_coef, 2)` - linear BMI effect  
+- **bmi² (β₄):** `r round(bmi2_coef, 4)` - captures curvature in BMI relationship
+
+The polynomial terms (age² and bmi²) allow the model to capture non-linear relationships. 
+A positive age² coefficient means charges increase at an accelerating rate with age. 
+Similarly, the bmi² term allows the BMI effect to vary across the BMI range.
+
+### Performance comparison
+```{r}
+glance_combined <- glance(model_combined)
+
+comparison <- bind_rows(
+  glance_simple %>% mutate(model = "Linear (age + bmi)"),
+  glance_combined %>% mutate(model = "Polynomial (age² + bmi²)")
+) %>%
+  select(model, r.squared, adj.r.squared, AIC, BIC)
+
+comparison %>% knitr::kable(caption = "Linear vs Polynomial Combined Models", digits = 4)
+```
+
+The combined polynomial model has R² = `r round(glance_combined$r.squared, 4)` 
+compared to linear R² = `r round(glance_simple$r.squared, 4)`, 
+an improvement of `r round((glance_combined$r.squared - glance_simple$r.squared)*100, 2)`%.
+
+### ANOVA comparison
+```{r}
+anova_combined <- anova(model_simple_multiple, model_combined)
+anova_combined %>% knitr::kable(caption = "ANOVA: Linear vs Polynomial Combined", digits = 4)
+```
+
+```{r echo=FALSE}
+anova_combined_pval <- anova_combined$`Pr(>F)`[2]
+```
+
+p = `r format.pval(anova_combined_pval, eps = 0.001)` 
+`r if(!is.na(anova_combined_pval) && anova_combined_pval < 0.05) {"indicates the polynomial terms significantly improve model fit."} else {"suggests polynomial terms do not significantly improve fit."}`
+
+## Diagnostic Plots
+
+```{r fig.height=8}
+autoplot(model_combined, which = 1:4, ncol = 2)
+```
+
+**Residuals vs Fitted:** Check for patterns. Ideally, residuals should scatter randomly around zero.
+
+**Normal Q-Q:** Points should follow the diagonal line, indicating normally distributed residuals.
+
+**Scale-Location:** Check for homoscedasticity (constant variance). A horizontal line is ideal.
+
+**Cook's Distance:** Identifies influential outliers.
+
+## The Overfitting Problem
+
+### What is overfitting?
+
+Adding more polynomial terms always increases R², but at some point, the model starts fitting noise rather than true patterns. 
+This is **overfitting**.
+
+### Example: Excessive polynomial degree
+```{r}
+model_age_overfit <- lm(charges ~ poly(age, degree = 10, raw = TRUE), data = data)
+glance_overfit <- glance(model_age_overfit)
+
+overfit_comparison <- bind_rows(
+  glance_age_quad %>% mutate(model = "Reasonable (degree 2)"),
+  glance_overfit %>% mutate(model = "Overfit (degree 10)")
+) %>%
+  select(model, r.squared, adj.r.squared, AIC, BIC)
+
+overfit_comparison %>% knitr::kable(caption = "Overfitting Demonstration", digits = 4)
+```
+
+**Observation:** The degree-10 polynomial has R² = `r round(glance_overfit$r.squared, 4)` 
+vs quadratic R² = `r round(glance_age_quad$r.squared, 4)`. 
+While R² increased by `r round((glance_overfit$r.squared - glance_age_quad$r.squared)*100, 2)`%, 
+note what happens to adjusted R² and AIC/BIC:
+
+- Adjusted R² `r if(glance_overfit$adj.r.squared < glance_age_quad$adj.r.squared) {"actually DECREASED"} else {"increased only slightly"}`, 
+  indicating the complexity penalty outweighs the fit improvement.
+- AIC `r if(glance_overfit$AIC > glance_age_quad$AIC) {"INCREASED (worse)"} else {"improved"}`.
+- BIC `r if(glance_overfit$BIC > glance_age_quad$BIC) {"INCREASED substantially (worse)"} else {"improved"}`.
+
+**Why is this bad?** A degree-10 polynomial creates a wiggly curve that passes very close to the data points, 
+but this "perfect fit" to the training data means it's fitting noise, not true patterns. 
+On new data, this overfit model would perform poorly.
+
+**Lesson:** R² alone is misleading. Always check adjusted R², AIC, and BIC to avoid overfitting. 
+The best model balances accuracy with simplicity.
+
+## Conclusion
+
+This analysis explored polynomial regression as an extension of linear modeling to capture non-linear relationships.
+
+**Age Polynomial Models:**
+
+`r if(!is.na(anova_age_pval_quad) && anova_age_pval_quad < 0.05) {"The quadratic term for age was statistically significant, indicating a non-linear relationship where insurance charges accelerate with age rather than increasing at a constant rate."} else {"Age showed a primarily linear relationship with charges, with polynomial terms not providing substantial improvement."}`
+
+**BMI Polynomial Models:**
+
+`r if(bmi2_sig) {"The quadratic BMI term was significant, suggesting charges increase at a non-constant rate with BMI."} else {"BMI showed a linear relationship with charges, with polynomial terms not significantly improving the model."}`
+
+**Model Selection:**
+
+The best model balances fit quality (R²) with complexity (number of parameters). 
+Adjusted R², AIC, and BIC penalize unnecessary complexity. 
+`r if(!is.na(anova_combined_pval) && anova_combined_pval < 0.05) {"For these data, the combined polynomial model (age² + bmi²) significantly outperformed the linear model, justifying the added complexity."} else {"For these data, the simpler linear model appeared adequate, with polynomial terms not providing sufficient improvement to justify added complexity."}`
+
+**Overfitting Risk:**
+
+Polynomial regression can easily overfit if degree is too high. The degree-10 example demonstrated how 
+R² can increase while model quality (by adjusted R², AIC, BIC) actually deteriorates. 
+**Always validate models on held-out test data** to ensure generalizability.
+
+**Practical Implications:**
+
+`r if(!is.na(anova_age_pval_quad) && anova_age_pval_quad < 0.05) {"The non-linear age effect suggests insurance pricing should account for accelerating costs in older age groups, not just apply a constant per-year increase."} else {"The linear relationships suggest straightforward pricing models may be adequate for age and BMI effects."}`
+
+**Methodological Insight:**
+
+Polynomial regression provides a simple way to model curvature without assuming a specific functional form. 
+However, it should be used judiciously. Start with low degrees (quadratic), test significance, 
+and avoid unnecessary complexity. When relationships are truly complex, consider alternative approaches 
+like splines or generalized additive models (GAMs).
+
+**Limitations:**
+
+This analysis examined polynomial terms in isolation. Real-world insurance charges likely involve 
+interactions between age, BMI, smoking status, and other factors. Future analyses could explore 
+polynomial terms combined with interactions, though this rapidly increases model complexity.
