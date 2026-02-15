@@ -69,7 +69,7 @@ The focus is on **methodology and model comparison**, not on clinical or predict
 - Polynomial curve overlays (linear, quadratic, cubic)  
 - Combined model comparison  
 - Diagnostic plots  
-
+![ BMI](plots/bmi_polynomial_curves.png)
 ## 📌 Conclusion  
 
 This project serves as a **methodological exercise** in extending linear regression to capture non-linear patterns:
